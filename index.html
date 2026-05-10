@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тар кезең: Интерактивті тапсырмалар</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out infinite; }
+        .bg-overlay {
+            background-image: url("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Syrym_Datuly.jpg/400px-Syrym_Datuly.jpg");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            opacity: 0.25;
+            filter: grayscale(100%);
+        }
+    </style>
+</head>
+<body class="bg-stone-200 min-h-screen relative overflow-x-hidden">
+    <!-- Background -->
+    <div class="fixed inset-0 z-0 pointer-events-none bg-overlay"></div>
+
+    <!-- Header -->
+    <header class="bg-amber-900/95 backdrop-blur text-amber-50 p-4 shadow-2xl flex justify-between items-center border-b-4 border-amber-600 sticky top-0 z-50">
+        <div class="flex items-center gap-4">
+            <div class="bg-white text-amber-900 font-bold px-3 py-1 rounded-sm text-xl border-2 border-amber-500">
+                JAS 2307
+            </div>
+            <h1 class="text-xl md:text-2xl font-serif font-bold uppercase tracking-widest">Тар кезең: Таным</h1>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div id="progress-dots" class="hidden md:flex gap-2">
+                <!-- Dots injected by JS -->
+            </div>
+            <span class="font-mono bg-amber-800 px-3 py-1 rounded border border-amber-600 text-sm md:text-base">Ұпай: <span id="score-val">0</span></span>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main id="app-container" class="py-10 px-4 md:px-8 relative z-10 max-w-6xl mx-auto">
+        <!-- Components will be injected here -->
+    </main>
+
+    <!-- Success Toast -->
+    <div id="success-toast" class="fixed bottom-10 right-10 bg-green-600 text-white p-6 rounded-2xl shadow-2xl flex items-center gap-4 transition-opacity duration-300 opacity-0 pointer-events-none z-50 animate-bounce">
+        <i data-lucide="volume-2" class="w-8 h-8"></i>
+        <div>
+            <p class="font-bold text-lg">Тамаша! Тапсырма орындалды!</p>
+            <p class="text-sm">Келесі кезеңге жол ашылды.</p>
+        </div>
+    </div>
+
+    <!-- Decoration -->
+    <div class="fixed top-0 left-0 w-2 h-full bg-amber-800/30 pointer-events-none z-0"></div>
+    <div class="fixed top-0 right-0 w-2 h-full bg-amber-800/30 pointer-events-none z-0"></div>
+
+    <script>
+        // State Management
+        let state = {
+            currentStep: 'intro',
+            progress: { quest: false, bingo: false, matching: false, test: false, timeline: false },
+            score: 0,
+            subStep: 0,
+            bingoMarked: [],
+            matchingSelections: {},
+            testCurrentQ: 0,
+            timelineSelected: []
+        };
+
+        const stepsOrder = ['quest', 'bingo', 'matching', 'test', 'timeline'];
+
+        function playSuccessSound() {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
+            audio.play().catch(() => console.log("Audio blocked"));
+        }
+
+        function showToast() {
+            const toast = document.getElementById('success-toast');
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+                toast.classList.remove('opacity-100');
+            }, 3000);
+        }
+
+        function completeTask(task) {
+            state.progress[task] = true;
+            state.score += 200;
+            updateHeader();
+            showToast();
+            playSuccessSound();
+        }
+
+        function updateHeader() {
+            document.getElementById('score-val').innerText = state.score;
+            const dotsContainer = document.getElementById('progress-dots');
+            dotsContainer.innerHTML = Object.keys(state.progress).map(k => 
+                `<div class="w-3 h-3 rounded-full ${state.progress[k] ? 'bg-green-400' : 'bg-amber-700'}"></div>`
+            ).join('');
+        }
+
+        // Templates
+        const templates = {
+            intro: () => `
+                <div class="flex flex-col items-center justify-center p-8 text-center min-h-[80vh]">
+                    <div class="bg-white/95 backdrop-blur-sm p-10 rounded-2xl shadow-2xl border-2 border-amber-200 max-w-4xl relative overflow-hidden">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Syrym_Datuly.jpg/400px-Syrym_Datuly.jpg" 
+                             class="w-56 h-72 mx-auto object-cover rounded-lg shadow-2xl mb-8 border-4 border-amber-800 grayscale hover:grayscale-0 transition-all duration-1000 transform hover:scale-105">
+                        <h2 class="text-3xl md:text-5xl font-serif font-extrabold text-amber-900 mb-6 uppercase tracking-tight">Сырым Датұлы: Азаттық рухы</h2>
+                        <p class="text-xl text-stone-700 mb-10 italic leading-relaxed max-w-2xl mx-auto">
+                            "Бұл би Сырым емес, батыр Сырым-ды..." <br> 
+                            <span class="text-stone-50 text-lg text-stone-500">Қажығали Мұханбетқалиұлының "Тар кезең" романы негізіндегі тарихи-әдеби квестке қош келдіңіз!</span>
+                        </p>
+                        <button onclick="changeStep('quest')" class="bg-amber-800 hover:bg-amber-700 text-white px-16 py-5 rounded-full text-2xl font-bold flex items-center gap-3 mx-auto transition-all hover:scale-110 shadow-2xl active:scale-95 border-b-4 border-amber-950">
+                            <i data-lucide="play"></i> Жорықты бастау
+                        </button>
+                    </div>
+                </div>`,
+            
+            quest: () => {
+                const questSteps = [
+                    { t: "1. Кейіпкерді тап", q: "«Бетінің түгі сыртына теуіп, жүзіне тіке қарауға жан шыдамас сұсты да қаһарлы кісіге айналып кеткен-ді». Бұл кім?", options: ["Нұралы хан", "Сырым Датұлы", "Барон Игельстром", "Ералы сұлтан"], correct: "Сырым Датұлы" },
+                    { t: "2. Үзіндіні сәйкестендір", q: "«Айтыңыздар бәріне... біз енді аттанысқа қам жасаймыз!» сөзінің негізгі мәні не?", options: ["Қонаққа шақыру", "Жалпыхалықтық көтеріліске үндеу", "Орыс әскерімен бітім", "Көш жолын талқылау"], correct: "Жалпыхалықтық көтеріліске үндеу" },
+                    { t: "3. Астарлы ойды анықта", q: "Сырымның «өлу туралы ғана ойлағаны» нені білдіреді?", options: ["Жанқиярлық ерлік пен тәуелсіздік мұраты", "Жеңілісті алдын ала мойындау", "Шаршағандықты білдіру", "Жаудан қорқу"], correct: "Жанқиярлық ерлік пен тәуелсіздік мұраты" },
+                    { t: "4. Өз көзқарасың", q: "Сырым батырдың «ағайын у ішсең - руыңмен» деуі бүгінгі таңда бірлікке шақыру тұрғысынан қаншалықты маңызды?", type: "text" }
+                ];
+                const current = questSteps[state.subStep];
+                return `
+                <div class="p-8 max-w-4xl mx-auto bg-white/95 rounded-xl shadow-2xl border-t-8 border-amber-700">
+                    <h3 class="text-3xl font-serif font-bold text-amber-900 mb-6 flex items-center gap-3"><i data-lucide="book-open"></i> Әдеби квест</h3>
+                    <div class="bg-amber-50 p-6 rounded-lg border-l-4 border-amber-500 mb-6">
+                        <p class="text-amber-800 font-bold mb-2 uppercase text-sm tracking-widest">${current.t}</p>
+                        <p class="text-xl text-stone-800 leading-relaxed font-medium">${current.q}</p>
+                    </div>
+                    <div id="quest-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${current.type === 'text' ? 
+                            `<textarea id="quest-text" class="col-span-full w-full p-4 border-2 border-stone-300 rounded-lg outline-none focus:border-amber-600" rows="4"></textarea>
+                             <button onclick="finishQuest()" class="col-span-full bg-green-700 text-white py-3 rounded-lg font-bold shadow-lg">Квестті аяқтау</button>` :
+                            current.options.map(opt => `<button onclick="handleQuestAnswer('${opt}', '${current.correct}')" class="text-left p-4 rounded-xl border-2 border-stone-200 bg-stone-50 hover:bg-amber-50 hover:border-amber-500 transition-all">${opt}</button>`).join('')
+                        }
+                    </div>
+                    <div class="mt-6 flex justify-end text-stone-500 italic">Қадам ${state.subStep + 1} / 4</div>
+                </div>`;
+            },
+
+            bingo: () => {
+                const items = [
+                    { text: "Сырым", isCorrect: true }, { text: "Жем", isCorrect: true }, { text: "Абай", isCorrect: false },
+                    { text: "Пугаш", isCorrect: true }, { text: "Суорып", isCorrect: true }, { text: "Астана", isCorrect: false },
+                    { text: "Байбақты", isCorrect: true }, { text: "Орынбор", isCorrect: true }, { text: "Тар кезең", isCorrect: true },
+                    { text: "Шоқан", isCorrect: false }, { text: "Би", isCorrect: true }, { text: "Батыр", isCorrect: true },
+                    { text: "Алматы", isCorrect: false }, { text: "Мылтық", isCorrect: true }, { text: "Шекті", isCorrect: true },
+                    { text: "Қаражігіт", isCorrect: true }, { text: "Кенесары", isCorrect: false }, { text: "Орманбет", isCorrect: true },
+                    { text: "Игельстром", isCorrect: true }, { text: "Бәйтерек", isCorrect: false }
+                ];
+                return `
+                <div class="p-8 max-w-5xl mx-auto bg-stone-50/95 rounded-xl shadow-xl border border-amber-200">
+                    <h3 class="text-3xl font-serif font-bold text-amber-900 mb-2 flex items-center gap-3"><i data-lucide="layout-grid"></i> Әдеби Bingo</h3>
+                    <p class="mb-6 text-stone-600 italic">Тек «Тар кезең» романына қатысты ұғымдарды белгілеңіз.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 mb-8">
+                        ${items.map((it, idx) => `
+                            <div onclick="toggleBingo(${idx})" id="bingo-${idx}" class="aspect-square flex items-center justify-center text-center p-2 border-2 rounded-xl font-bold text-sm bg-white border-amber-50 text-amber-900 hover:border-amber-300 transition-all cursor-pointer ${state.bingoMarked.includes(idx) ? 'bg-amber-100 border-amber-500 scale-105' : ''}">
+                                ${it.text}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button id="bingo-check" onclick="checkBingo()" class="w-full py-4 bg-amber-800 text-white rounded-xl font-bold text-xl shadow-lg">Жауапты тексеру</button>
+                </div>`;
+            },
+
+            matching: () => {
+                const pairs = [
+                    { q: "Пугаш батыр", a: "Емельян Пугачев" },
+                    { q: "Жандарал Суорып", a: "Александр Суворов" },
+                    { q: "Дүрдана", a: "Сырымның анасы" },
+                    { q: "Рақ", a: "Сырымның атқосшысы" },
+                    { q: "Хажы Тархан", a: "Астрахан қаласы" }
+                ];
+                return `
+                <div class="p-8 max-w-4xl mx-auto bg-white/95 rounded-xl shadow-xl">
+                    <h3 class="text-3xl font-serif font-bold text-amber-900 mb-6 flex items-center gap-3"><i data-lucide="list-todo"></i> Сәйкестендіру</h3>
+                    <div class="space-y-4">
+                        ${pairs.map(p => `
+                            <div class="flex flex-col md:flex-row gap-4 md:items-center">
+                                <div class="flex-1 p-4 bg-amber-50 rounded-xl border-2 border-amber-100 font-bold text-amber-900">${p.q}</div>
+                                <div class="hidden md:block text-amber-500 font-bold">→</div>
+                                <select onchange="handleMatch('${p.q}', this.value)" class="flex-1 p-4 bg-stone-50 border-2 border-stone-200 rounded-xl outline-none">
+                                    <option value="">Таңдаңыз...</option>
+                                    ${pairs.map(o => `<option value="${o.a}">${o.a}</option>`).join('')}
+                                </select>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button onclick="checkMatching()" class="mt-8 w-full py-4 bg-amber-800 text-white rounded-xl font-bold">Тексеру</button>
+                </div>`;
+            },
+
+            test: () => {
+                const questions = [
+                    { q: "Сырым биді жұртқа сұсты де қаһарлы етіп көрсеткен не?", options: ["Билікке құмарлық", "Қалың елдің қамы", "Жеке бас абыройы", "Орыс патшасының тапсырмасы"], c: 1 },
+                    { q: "Сырым осы жолғы айқас туралы не ойлады?", options: ["Жеңіске жететініне сенді", "Бітімгершілікке барамын деді", "Аянбай соғысып, өлуге бел буды", "Қашып құтылуды ойлады"], c: 2 },
+                    { q: "Орманбет би Тасобада неше жыл атысып өлген?", options: ["10 жыл", "18 жыл", "5 жыл", "40 жыл"], c: 1 },
+                    { q: "Сырым зеңбірегі мен мылтығы бар орыс әскерін кімге жеңгізбейді деп түсінді?", options: ["Садақты қазаққа", "Қылыш-найзалы казакқа", "Бертінгі батырларға", "Атты әскерге"], c: 1 },
+                    { q: "Сырымның атасы Дәуқара батыр қай батырмен ерегесте опат болған?", options: ["Бармақ батыр", "Қазтуған батыр", "Орақ батыр", "Телағыс батыр"], c: 0 },
+                    { q: "Сырым Пугачев көтерілісі кезінде кіммен тізе қоса қимылдады?", options: ["Нұралы хан", "Сейдалы сұлтан", "Қаражігіт молда", "Көтібар батыр"], c: 1 },
+                    { q: "Сырым жасырын сақтаған қаруларын қай жерде бірінші рет жарыққа шығарды?", options: ["Орынборда", "Мұғалжар қойнауында", "Жайық бойында", "Хиуада"], c: 1 },
+                    { q: "Сырымның айтуынша, ендігі соғыс қандай соғыс?", options: ["Баяғы еңіреген ерлер соғысы", "Амал мен айланың соғысы", "Садақ пен найза соғысы", "Тек зеңбірек соғысы"], c: 1 },
+                    { q: "Қазақтан шыққан тұңғыш мүфтият мүшесі кім?", options: ["Қазақай ахун", "Қаражігіт Бектау баласы", "Ахметжан қожа", "Әбужәлел қожа"], c: 1 },
+                    { q: "Сырымның қызы Сырға кімнің баласына ұзатылған?", options: ["Қазақай ахунның", "Көтібар батырдың", "Достан мырзаның", "Сары Шоңай бидің"], c: 0 },
+                    { q: "Сырым ағасы Бұлан бидің үшінші аманаты бойынша кімді үйлендірді?", options: ["Рақты", "Көтібарды", "Маманды", "Достанды"], c: 0 },
+                    { q: "Рақ кімнің қызын (Сарыалтынды) алып отыр?", options: ["Сегізбай бидің", "Сары Шоңай бидің", "Қазақай ахунның", "Бармақ батырдың"], c: 1 },
+                    { q: "Шекті елінен көмекке бірінші болып кім келді?", options: ["Көтібар батыр", "Арыстан батыр", "Достан мырза", "Бәрі бірге келді"], c: 3 },
+                    { q: "Сырым таңдап алған бес жүз мергеннен неше топ жасақтады?", options: ["3 топ", "5 топ", "10 топ", "2 топ"], c: 1 },
+                    { q: "Мәтіндегі «Пугаш батыр» кімді меңзейді?", options: ["Емельян Пугачевті", "Қазақ батырын", "Орыс генералын", "Жоңғар қолбасшысын"], c: 0 },
+                    { q: "Сырымның анасы Дүрдананың ауылы қалай аталады?", options: ["Сырым ауылы", "Дәкем ауылы", "Билер ауылы", "Батыр ауылы"], c: 1 },
+                    { q: "Сырымның атасы Дәуқара батырды кім әдісқойлығымен аттан түсіріп кетті?", options: ["Бармақ батыр", "Орақ батыр", "Мамай батыр", "Сидақ батыр"], c: 0 },
+                    { q: "Жандарал Суорыптың көзі қандай түсті деседі?", options: ["Қара", "Көкшіл сұр", "Қоңыр", "Жасыл"], c: 1 },
+                    { q: "Сырым Орманбет бидің жолын қай жерде қалап алды?", options: ["Өлеңті бойында", "Тасобада", "Жем бойында", "Мұғалжарда"], c: 1 },
+                    { q: "Мәтіндегі «Бөлек деген жұрт» қай халықты білдіреді?", options: ["Поляктарды", "Башқұрттарды", "Түріктерді", "Қалмақтарды"], c: 0 }
+                ];
+                const current = questions[state.testCurrentQ];
+                return `
+                <div class="p-8 max-w-4xl mx-auto bg-stone-50/95 rounded-xl shadow-xl border-b-8 border-amber-700">
+                    <h3 class="text-3xl font-serif font-bold text-amber-900 mb-2 flex items-center gap-3"><i data-lucide="help-circle"></i> 20 күрделі сұрақ</h3>
+                    <div class="bg-white p-8 rounded-xl border border-stone-200 shadow-inner mb-6">
+                        <span class="bg-amber-700 text-white px-3 py-1 rounded-full text-xs font-bold mb-4 inline-block">Сұрақ ${state.testCurrentQ + 1}/20</span>
+                        <p class="text-xl md:text-2xl font-serif text-stone-800 mb-8">${current.q}</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${current.options.map((opt, idx) => `<button onclick="handleTestAnswer(${idx}, ${current.c})" class="p-4 border-2 border-stone-100 rounded-xl text-left bg-stone-50 hover:border-amber-400 transition-all">${opt}</button>`).join('')}
+                        </div>
+                    </div>
+                    <div class="w-full bg-stone-200 h-3 rounded-full overflow-hidden">
+                        <div class="bg-amber-600 h-full transition-all duration-300" style="width: ${((state.testCurrentQ + 1)/20)*100}%"></div>
+                    </div>
+                </div>`;
+            },
+
+            timeline: () => {
+                const events = [
+                    { id: 1, year: "1773-1775", event: "Пугачев бастаған шаруалар соғысы (Сырымның қатысуы)", real: true },
+                    { id: 2, year: "1783", event: "Кіші жүзде Сырым Датұлы бастаған ұлт-азаттық көтерілістің басталуы", real: true },
+                    { id: 3, year: "1785", event: "Орынборда Барон Игельстром реформасының ұсынылуы", real: true },
+                    { id: 4, year: "1797", event: "Сырым Датұлының Хиуа хандығына өтіп кетуі", real: true },
+                    { id: 5, year: "1841", event: "", real: false },
+                    { id: 6, year: "1916", event: "", real: false }
+                ];
+                return `
+                <div class="p-8 max-w-4xl mx-auto bg-white/95 rounded-xl shadow-xl">
+                    <h3 class="text-3xl font-serif font-bold text-amber-900 mb-4 flex items-center gap-3"><i data-lucide="history"></i> Оқиғалар тізбегі</h3>
+                    <p class="mb-6 text-stone-600 italic font-bold">Тек романдағы нақты тарихи оқиғаларды белгілеңіз:</p>
+                    <div class="space-y-4 mb-8">
+                        ${events.map(e => `
+                            <div onclick="toggleTimeline(${e.id})" class="p-4 rounded-xl border-2 cursor-pointer transition-all ${state.timelineSelected.includes(e.id) ? 'bg-amber-100 border-amber-600 shadow-md' : 'bg-stone-50 border-stone-100'}">
+                                <span class="font-bold text-amber-900">${e.year} жыл</span> ${e.event ? '— ' + e.event : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button onclick="checkTimeline()" class="w-full py-5 bg-green-700 text-white rounded-xl font-bold text-xl">Жорықты аяқтау</button>
+                </div>`;
+            },
+
+            finish: () => `
+                <div class="flex flex-col items-center justify-center p-12 text-center bg-green-50/90 backdrop-blur min-h-[70vh] rounded-2xl border-4 border-green-200">
+                    <i data-lucide="trophy" class="w-32 h-32 text-yellow-500 mb-8 animate-bounce"></i>
+                    <h2 class="text-6xl md:text-8xl font-serif font-bold text-green-900 mb-6 uppercase tracking-tighter">ЖЕҢІС!</h2>
+                    <p class="text-2xl text-stone-700 max-w-2xl mb-12">Құттықтаймыз! Сіз барлық кезеңнен сүрінбей өттіңіз.</p>
+                    <button onclick="location.reload()" class="bg-amber-800 text-white px-16 py-5 rounded-full font-bold text-2xl">Бас мәзірге оралу</button>
+                </div>`
+        };
+
+        // Logic Handlers
+        function changeStep(step) {
+            state.currentStep = step;
+            render();
+        }
+
+        function handleQuestAnswer(selected, correct) {
+            if(selected === correct) {
+                state.subStep++;
+                if(state.subStep >= 4) {
+                    completeTask('quest');
+                    changeStep('bingo');
+                } else {
+                    render();
+                }
+            } else {
+                alert("Қате жауап, қайта ойланыңыз.");
+            }
+        }
+
+        function finishQuest() {
+            completeTask('quest');
+            changeStep('bingo');
+        }
+
+        function toggleBingo(idx) {
+            if(state.bingoMarked.includes(idx)) state.bingoMarked = state.bingoMarked.filter(i => i !== idx);
+            else state.bingoMarked.push(idx);
+            render();
+        }
+
+        function checkBingo() {
+            const bingoItems = [
+                { isCorrect: true }, { isCorrect: true }, { isCorrect: false },
+                { isCorrect: true }, { isCorrect: true }, { isCorrect: false },
+                { isCorrect: true }, { isCorrect: true }, { isCorrect: true },
+                { isCorrect: false }, { isCorrect: true }, { isCorrect: true },
+                { isCorrect: false }, { isCorrect: true }, { isCorrect: true },
+                { isCorrect: true }, { isCorrect: false }, { isCorrect: true },
+                { isCorrect: true }, { isCorrect: false }
+            ];
+            const correctIndices = bingoItems.map((it, idx) => it.isCorrect ? idx : null).filter(i => i !== null);
+            const isAllCorrectSelected = correctIndices.every(idx => state.bingoMarked.includes(idx));
+            const isAnyWrongSelected = state.bingoMarked.some(idx => !bingoItems[idx].isCorrect);
+
+            if(isAllCorrectSelected && !isAnyWrongSelected) {
+                completeTask('bingo');
+                changeStep('matching');
+            } else {
+                alert("Қателік бар. Романдағы сөздерді ғана белгілеңіз.");
+                state.bingoMarked = [];
+                render();
+            }
+        }
+
+        function handleMatch(q, val) {
+            state.matchingSelections[q] = val;
+        }
+
+        function checkMatching() {
+            const pairs = [
+                { q: "Пугаш батыр", a: "Емельян Пугачев" },
+                { q: "Жандарал Суорып", a: "Александр Суворов" },
+                { q: "Дүрдана", a: "Сырымның анасы" },
+                { q: "Рақ", a: "Сырымның атқосшысы" },
+                { q: "Хажы Тархан", a: "Астрахан қаласы" }
+            ];
+            const allCorrect = pairs.every(p => state.matchingSelections[p.q] === p.a);
+            if(allCorrect) {
+                completeTask('matching');
+                changeStep('test');
+            } else {
+                alert("Сәйкестіктер қате.");
+            }
+        }
+
+        function handleTestAnswer(idx, correct) {
+            if(idx === correct) {
+                state.testCurrentQ++;
+                if(state.testCurrentQ >= 20) {
+                    completeTask('test');
+                    changeStep('timeline');
+                } else {
+                    render();
+                }
+            } else {
+                alert("Қате жауап.");
+            }
+        }
+
+        function toggleTimeline(id) {
+            if(state.timelineSelected.includes(id)) state.timelineSelected = state.timelineSelected.filter(i => i !== id);
+            else state.timelineSelected.push(id);
+            render();
+        }
+
+        function checkTimeline() {
+            const realIds = [1, 2, 3, 4];
+            const isCorrect = state.timelineSelected.length === realIds.length && realIds.every(id => state.timelineSelected.includes(id));
+            if(isCorrect) {
+                completeTask('timeline');
+                changeStep('finish');
+            } else {
+                alert("Тек романдағы нақты оқиғаларды таңдаңыз.");
+            }
+        }
+
+        // Render Function
+        function render() {
+            const container = document.getElementById('app-container');
+            container.innerHTML = templates[state.currentStep]();
+            updateHeader();
+            lucide.createIcons();
+        }
+
+        // Initial Load
+        window.onload = () => {
+            render();
+        };
+    </script>
+</body>
+</html>
